@@ -1,26 +1,35 @@
 const express = require('express');
 const cors = require('cors');
-const mongoose = require('mongoose');
+const { MongoClient } = require('mongodb');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-mongoose
-  .connect(process.env.MONGO_URI)
-  .then(() => console.log('MongoDB connected'))
-  .catch(err => console.error('MongoDB error:', err))
+const client = new MongoClient(process.env.MONGO_URI);
+
+let db;
+
+async function connectDB() {
+  try {
+    await client.connect();
+    db = client.db(); // lấy database từ URI
+    console.log('MongoDB connected');
+  } catch (err) {
+    console.error('MongoDB connect error:', err);
+  }
+}
+
+connectDB();
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// API POST endpoint để nhận deviceId
-app.post('/api/device', (req, res) => {
+app.post('/api/device', async (req, res) => {
   try {
-    const { deviceId } = req.body;
+    const { deviceId, user_name = '' } = req.body;
 
-    // Kiểm tra deviceId có được gửi lên không
     if (!deviceId) {
       return res.status(400).json({
         success: false,
@@ -28,24 +37,25 @@ app.post('/api/device', (req, res) => {
       });
     }
 
-    // Xử lý deviceId ở đây (ví dụ: lưu vào database, kiểm tra, etc.)
-    console.log('Nhận được deviceId:', deviceId);
+    const result = await db.collection('devices').insertOne({
+      deviceId,
+      user_name,
+      createdAt: new Date()
+    });
 
-    // Trả về response thành công
     res.status(200).json({
       success: true,
-      message: 'Nhận deviceId thành công',
+      message: 'Lưu deviceId thành công',
       data: {
-        deviceId: deviceId,
-        receivedAt: new Date().toISOString()
+        id: result.insertedId,
+        deviceId
       }
     });
   } catch (error) {
-    console.error('Lỗi khi xử lý request:', error);
+    console.error('Lỗi khi lưu device:', error);
     res.status(500).json({
       success: false,
-      message: 'Lỗi server khi xử lý request',
-      error: error.message
+      message: 'Lỗi server'
     });
   }
 });
